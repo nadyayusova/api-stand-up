@@ -2,7 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 
 import {sendError} from './modules/send.js';
-import {checkFile} from './modules/checkFile.js';
+import {checkFileExist, createFileIfNotExist} from './modules/checkFile.js';
 import {handleComediansRequest} from './modules/handleComediansRequest.js';
 import {handleAddClient} from './modules/handleAddClient.js';
 import {handleClientsRequest} from './modules/handleClientsRequest.js';
@@ -13,47 +13,52 @@ export const COMEDIANS = './comedians.json';
 export const CLIENTS = './clients.json';
 
 
-const startServer = async () => {
-  if (!(await checkFile(COMEDIANS))) {
+const startServer = async (port) => {
+  if (!(await checkFileExist(COMEDIANS))) {
     return;
   }
 
-  await checkFile(CLIENTS, true);
+  await createFileIfNotExist(CLIENTS);
 
   const comediansData = await fs.readFile(COMEDIANS, 'utf8');
   const comedians = JSON.parse(comediansData);
 
-  http
+  const server = http
     .createServer(async (req, res) => {
       try {
         res.setHeader('Access-Control-Allow-Origin', '*');
         const segments = req.url.split('/').filter(Boolean);
 
-        if (req.method === 'GET' && segments[0] === 'comedians') {
-          handleComediansRequest(req, res, comedians, segments);
+        if (!segments.length) {
+          sendError(res, 404, 'Not Found');
           return;
         }
 
-        if (req.method === 'POST' && segments[0] === 'clients') {
+        const [resource, id] = segments;
+
+        if (req.method === 'GET' && resource === 'comedians') {
+          handleComediansRequest(req, res, comedians, id);
+          return;
+        }
+
+        if (req.method === 'POST' && resource === 'clients') {
           // POST /clients
           // Добавление клиента
           handleAddClient(req, res);
           return;
         }
 
-        if (req.method === 'GET' && segments[0] === 'clients' && segments.length === 2) {
+        if (req.method === 'GET' && resource === 'clients' && segments.length === 2) {
           // Get /clients/:ticket
           // Получение клиента по номеру билета
-          const ticket = segments[1];
-          handleClientsRequest(req, res, ticket);
+          handleClientsRequest(req, res, id);
           return;
         }
 
-        if (req.method === 'PATCH' && segments[0] === 'clients' && segments.length === 2) {
+        if (req.method === 'PATCH' && resource === 'clients' && segments.length === 2) {
           // PATCH /clients/:ticket
           // Обновление клиента по номеру билета
-          const ticket = segments[1];
-          handleUpdateClient(req, res, ticket);
+          handleUpdateClient(req, res, id);
           return;
         }
 
@@ -62,10 +67,23 @@ const startServer = async () => {
       } catch (error) {
         sendError(res, 500, `Ошибка сервера: ${error}`);
       }
-    })
-    .listen(PORT);
+    });
 
-  console.log(`Сервер запущен по адресу http://localhost:${PORT}`);
+  server.listen(port, () => {
+    console.log(`Сервер запущен по адресу http://localhost:${port}`);
+  });
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.log(`Порт ${port} занят`);
+      if ((port - PORT) < 11) {
+        console.log(`Пробуем запустить на порту ${port + 1}`);
+        startServer(port + 1);
+      }
+    } else {
+      console.log('Возникла ошибка:', err);
+    }
+  });
 };
 
-startServer();
+startServer(PORT);

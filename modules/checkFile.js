@@ -1,16 +1,6 @@
 import fs from 'node:fs/promises';
 
-export const checkFile = async (path, createIfMissing) => {
-  if (createIfMissing) {
-    try {
-      await fs.access(path);
-    } catch (error) {
-      console.log('error: ', error);
-      await fs.writeFile(path, JSON.stringify([]));
-      console.log(`Файл ${path} был создан!`);
-    }
-  }
-
+export const checkFileExist = async (path) => {
   try {
     await fs.access(path);
   } catch (error) {
@@ -21,3 +11,13 @@ export const checkFile = async (path, createIfMissing) => {
 
   return true;
 };
+
+export const createFileIfNotExist = async (path) => {
+  try {
+    await fs.access(path);
+  } catch (error) {
+    console.log('error: ', error);
+    await fs.writeFile(path, JSON.stringify([]));
+    console.log(`Файл ${path} был создан!`);
+  }
+}
